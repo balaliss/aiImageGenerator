@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Image Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px 64px;
+      background: #0f0f0f;
+      color: #f0f0f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #a78bfa, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: #888;
+      font-size: 0.95rem;
+      margin-bottom: 40px;
+    }
+
+    .form {
+      width: 100%;
+      max-width: 640px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 14px 16px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 10px;
+      color: #f0f0f0;
+      font-size: 1rem;
+      font-family: inherit;
+      resize: vertical;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+
+    textarea:focus { border-color: #7c3aed; }
+    textarea::placeholder { color: #555; }
+
+    button {
+      padding: 14px;
+      background: linear-gradient(135deg, #7c3aed, #2563eb);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    button:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    button:active:not(:disabled) { transform: translateY(0); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .status {
+      margin-top: 12px;
+      font-size: 0.9rem;
+      min-height: 1.2em;
+      text-align: center;
+    }
+
+    .status.error { color: #f87171; }
+    .status.loading { color: #a78bfa; }
+
+    .spinner {
+      display: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .result {
+      margin-top: 40px;
+      width: 100%;
+      max-width: 640px;
+    }
+
+    .result img {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid #222;
+      display: block;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+    }
+
+    .download-btn {
+      display: none;
+      margin-top: 14px;
+      padding: 10px 24px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #f0f0f0;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      transition: border-color 0.2s;
+    }
+
+    .download-btn:hover { border-color: #7c3aed; }
+  </style>
+</head>
+<body>
+
+  <h1>AI Image Generator</h1>
+  <p class="subtitle">Powered by DALL-E 3</p>
+
+  <div class="form">
+    <textarea
+      id="prompt"
+      placeholder="Describe the image you want to create…&#10;e.g. A serene Japanese garden at dusk, golden hour lighting, painterly style"
+      maxlength="4000"
+    ></textarea>
+    <button id="generateBtn" onclick="generate()">Generate Image</button>
+    <div class="spinner" id="spinner"></div>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="result" id="result" style="display:none;">
+    <img id="generatedImage" src="" alt="Generated image" />
+    <a class="download-btn" id="downloadBtn" download="ai-image.png">Download Image</a>
+  </div>
+
+  <script>
+    async function generate() {
+      const prompt = document.getElementById('prompt').value.trim();
+      const btn = document.getElementById('generateBtn');
+      const spinner = document.getElementById('spinner');
+      const status = document.getElementById('status');
+      const result = document.getElementById('result');
+      const img = document.getElementById('generatedImage');
+      const downloadBtn = document.getElementById('downloadBtn');
+
+      if (!prompt) {
+        showStatus('Please enter a prompt.', 'error');
+        return;
+      }
+
+      // Loading state
+      btn.disabled = true;
+      btn.textContent = 'Generating…';
+      spinner.style.display = 'block';
+      result.style.display = 'none';
+      downloadBtn.style.display = 'none';
+      showStatus('This usually takes 10–20 seconds…', 'loading');
+
+      try {
+        const res = await fetch('/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Something went wrong.');
+        }
+
+        img.src = data.url;
+        img.onload = () => {
+          result.style.display = 'block';
+          downloadBtn.href = data.url;
+          downloadBtn.style.display = 'block';
+        };
+
+        showStatus('', '');
+      } catch (err) {
+        showStatus(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate Image';
+        spinner.style.display = 'none';
+      }
+    }
+
+    function showStatus(msg, type) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status ' + type;
+    }
+
+    // Allow Ctrl+Enter / Cmd+Enter to submit
+    document.getElementById('prompt').addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') generate();
+    });
+  </script>
+
+</body>
+</html>
